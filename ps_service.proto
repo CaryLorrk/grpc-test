@@ -1,0 +1,25 @@
+syntax="proto3";
+
+service PsService {
+    rpc CheckAlive(CheckAliveRequest) returns (CheckAliveResponse) {}
+    rpc Update(UpdateRequest) returns (UpdateResponse) {}
+}
+
+message CheckAliveRequest {
+
+}
+
+message CheckAliveResponse {
+    bool status = 1;
+
+}
+
+message UpdateRequest {
+    int32 client = 1;
+    int32 iteration = 2;
+
+}
+
+message UpdateResponse {
+    int64 iteration= 1;
+}
