@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* Listen to complete queue */
+    /* Listen to completion queue */
     c->client_thread_ = std::make_unique<std::thread>(client_thread_func_);
     std::this_thread::sleep_for(100ms);
 
