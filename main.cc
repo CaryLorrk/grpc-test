@@ -11,6 +11,9 @@
 
 using namespace std::chrono_literals;
 
+std::mutex cout_mu;
+
+/* Sync Server */
 class PsServiceServer: public PsService::Service
 {
 public:
@@ -26,7 +29,10 @@ public:
     grpc::Status Update(grpc::ServerContext* ctx,
             const UpdateRequest* req,
             UpdateResponse* res) {
-        std::cout << "client: " << req->client() << " iteration: " << req->iteration() << std::endl;
+        {
+            std::unique_lock<std::mutex> lock(cout_mu);
+            std::cout << "receive from client: " << req->client() << " iteration: " << req->iteration() << std::endl;
+        }
         std::unique_lock<std::mutex> lock(mu);
         auto& iteration = iterations[req->client()];
         iteration += 1;
@@ -85,11 +91,13 @@ void client_thread_func_() {
         auto tag = (UpdateTag*)got_tag;
         if (!tag->status.ok()) {
             std::cout << "Update gRPC failed. Error code: " << 
-                tag->status.error_code();
+                tag->status.error_code() << std::endl;
             exit(0);
         }
         std::unique_lock<std::mutex> lock(c->mu);
-        c->iterations[tag->server] = tag->res.iteration();
+        if (c->iterations[tag->server] < tag->res.iteration()) {
+            c->iterations[tag->server] = tag->res.iteration();
+        }
         delete tag;
         c->cv.notify_all();
     }
@@ -148,7 +156,7 @@ int main(int argc, char *argv[])
     std::this_thread::sleep_for(100ms);
 
     while(1) {
-        /* Update request */
+        /* Client update request */
         for(size_t server = 0; server < c->hosts.size(); server++) {
             UpdateTag* tag = new UpdateTag();
             tag->server = server;
@@ -156,6 +164,11 @@ int main(int argc, char *argv[])
             UpdateRequest req;
             req.set_client(c->this_host);
             req.set_iteration(c->iteration);
+
+            {
+                std::unique_lock<std::mutex> lock(cout_mu);
+                std::cout << "send to server: " << server << " iteration: " << c->iteration << std::endl;
+            }
             c->stubs[server]->AsyncUpdate(&tag->ctx, req, &c->cq)->
                 Finish(&tag->res, &tag->status, (void*) tag);
         }        
