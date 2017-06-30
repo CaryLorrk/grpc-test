@@ -17,15 +17,17 @@ std::mutex cout_mu;
 class PsServiceServer: public PsService::Service
 {
 public:
-    PsServiceServer(size_t num_hosts) {
-        iterations.resize(num_hosts, -1);
-    }
+    PsServiceServer(size_t num_hosts):
+        iterations_(num_hosts, -1) {}
+
     grpc::Status CheckAlive(grpc::ServerContext* ctx,
             const CheckAliveRequest* req,
             CheckAliveResponse* res) {
         res->set_status(true);
         return grpc::Status::OK;
     }
+
+
     grpc::Status Update(grpc::ServerContext* ctx,
             const UpdateRequest* req,
             UpdateResponse* res) {
@@ -33,21 +35,23 @@ public:
             std::unique_lock<std::mutex> lock(cout_mu);
             std::cout << "receive from client: " << req->client() << " iteration: " << req->iteration() << std::endl;
         }
-        std::unique_lock<std::mutex> lock(mu);
-        auto& iteration = iterations[req->client()];
-        iteration += 1;
-        cv.notify_all();
+        std::unique_lock<std::mutex> lock(mu_);
+        auto& iteration = iterations_[req->client()];
+        iteration = req->iteration();
+        cv_.notify_all();
         int min;
-        cv.wait(lock, [this, &min, iteration]{
-            min = *std::min_element(iterations.begin(), iterations.end());
+        /* Wait until all updates from clients is received */
+        cv_.wait(lock, [this, &min, iteration]{
+            min = *std::min_element(iterations_.begin(), iterations_.end());
             return min >= iteration;
         });
         res->set_iteration(min);
         return grpc::Status::OK;
     }
-    std::mutex mu;
-    std::condition_variable cv;
-    std::vector<int> iterations;
+private:
+    std::mutex mu_;
+    std::condition_variable cv_;
+    std::vector<int> iterations_;
 };
 
 struct Context
@@ -172,7 +176,7 @@ int main(int argc, char *argv[])
             c->stubs[server]->AsyncUpdate(&tag->ctx, req, &c->cq)->
                 Finish(&tag->res, &tag->status, (void*) tag);
         }        
-        /* Update complete */
+        /* Update complete. Next iteration */
         c->iteration++;
 
         /* Sync data */
