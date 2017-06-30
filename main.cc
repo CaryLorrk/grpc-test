@@ -65,8 +65,8 @@ struct Context
     std::unique_ptr<grpc::Server> server;
     std::vector<std::unique_ptr<PsService::Stub>> stubs; 
     grpc::CompletionQueue cq;
-    std::unique_ptr<std::thread> server_thread_;
-    std::unique_ptr<std::thread> client_thread_;
+    std::thread server_thread_;
+    std::thread client_thread_;
 
     std::mutex mu;
     std::condition_variable cv;
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     c->service = std::make_unique<PsServiceServer>(c->hosts.size());
     builder.RegisterService(c->service.get());
     c->server = builder.BuildAndStart();
-    c->server_thread_ = std::make_unique<std::thread>(server_thread_func);
+    c->server_thread_ = std::thread(server_thread_func);
     std::this_thread::sleep_for(100ms);
 
     /* Check servers alive */
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
     }
 
     /* Listen to completion queue */
-    c->client_thread_ = std::make_unique<std::thread>(client_thread_func_);
+    c->client_thread_ = std::thread(client_thread_func_);
     std::this_thread::sleep_for(100ms);
 
     while(1) {
